@@ -1,6 +1,6 @@
 # pj-rs
 
-**pj** (project journal) is a command-line utility for **dumping project context**.  
+**pj** is a command-line utility for **dumping project context**.  
 It scans files, filters them by extensions, excludes irrelevant ones (e.g., `bin/`, `node_modules/`), and outputs results in different formats.
 
 ---
