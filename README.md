@@ -109,28 +109,4 @@ cargo build --release
 ./target/release/pj --help
 ```
 
----
-
-## 🧱 Architecture
-
-```mermaid
-graph TD
-    subgraph "pj-rs library"
-        A[pj_rs::filters]
-        B[pj_rs::output]
-    end
-
-    subgraph "pj binary"
-        C[main.rs]
-    end
-
-    C --> A
-    C --> B
-
-    A --> D[ignore::WalkBuilder]
-    A --> E[globset::GlobSetBuilder]
-    B --> F[std::fs]
-
-    style subgraph fill:#eef
-```
 
