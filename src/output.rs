@@ -9,7 +9,8 @@ pub fn print_content(files: &[PathBuf]) {
 
     for file in files {
         println!("{}", "=".repeat(20));
-        if let Ok(rel_path) = file.strip_prefix(&std::env::current_dir().unwrap()) {
+        // 🔥 Убираем лишний &
+        if let Ok(rel_path) = file.strip_prefix(std::env::current_dir().unwrap()) {
             println!("File: {}", rel_path.display());
         } else {
             println!("File: {}", file.display());
@@ -37,8 +38,9 @@ pub fn print_tree(files: &[PathBuf]) {
         .min(120);
 
     for file in files {
+        // 🔥 Убираем лишний &
         let rel_path = file
-            .strip_prefix(&std::env::current_dir().unwrap())
+            .strip_prefix(std::env::current_dir().unwrap())
             .unwrap_or(file);
         let lines = fs::read_to_string(file)
             .map(|s| s.lines().count())
@@ -69,8 +71,9 @@ pub fn print_list(files: &[PathBuf]) {
 
     for file in files {
         let size_str = format_size(file.metadata().map(|m| m.len()).unwrap_or(0));
+
         let rel_path = file
-            .strip_prefix(&std::env::current_dir().unwrap())
+            .strip_prefix(std::env::current_dir().unwrap())
             .unwrap_or(&file);
         println!("{:>10}    {}", size_str, rel_path.display());
     }

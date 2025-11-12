@@ -2,13 +2,13 @@ use globset::{Glob, GlobSetBuilder};
 use ignore::WalkBuilder;
 use std::path::{Path, PathBuf};
 
-pub fn get_template(
-    name: &str,
-) -> Option<(
+type TemplateConfig = (
     Option<Vec<&'static str>>,
     Vec<&'static str>,
     Vec<&'static str>,
-)> {
+);
+
+pub fn get_template(name: &str) -> Option<TemplateConfig> {
     match name {
         "cs" => Some((
             Some(vec![".cs", ".xaml", ".csproj", ".props", ".targets"]),
@@ -46,11 +46,7 @@ pub fn get_template(
     }
 }
 
-pub fn get_default_config() -> (
-    Option<Vec<&'static str>>,
-    Vec<&'static str>,
-    Vec<&'static str>,
-) {
+pub fn get_default_config() -> TemplateConfig {
     (
         None,
         vec![
@@ -93,7 +89,7 @@ pub fn get_default_config() -> (
 pub fn collect_and_filter(
     paths: &[PathBuf],
     allowed_exts: Option<&[&str]>,
-    forbidden_dirs: &[String], // Было &[&str] — стало &[String]
+    forbidden_dirs: &[String],
     exclude_patterns: &[String],
 ) -> Vec<PathBuf> {
     let mut files = Vec::new();
@@ -101,33 +97,28 @@ pub fn collect_and_filter(
     for path in paths {
         let mut builder = WalkBuilder::new(path);
 
-        // Теперь forbidden_dirs — Vec<String>, можно передать напрямую
-        let forbidden_dirs: Vec<String> = forbidden_dirs.to_vec();
+        let forbidden_dirs: Vec<String> = forbidden_dirs.iter().map(|s| s.to_string()).collect();
 
         builder.filter_entry(move |entry| {
             !forbidden_dirs.contains(&entry.file_name().to_string_lossy().to_string())
         });
 
-        for result in builder.build() {
-            if let Ok(entry) = result {
-                if entry.file_type().map_or(false, |t| t.is_file()) {
-                    if is_text_file(entry.path())
-                        && !matches_exclude(entry.path(), exclude_patterns)
-                    {
-                        if allowed_exts.map_or(true, |exts| {
-                            exts.iter().any(|e| {
-                                entry.path().extension().map_or(false, |ext| {
-                                    ext.eq_ignore_ascii_case(e.trim_start_matches('.'))
-                                })
-                            }) || entry
-                                .path()
-                                .file_name()
-                                .map_or(false, |name| name == "Gemfile")
-                        }) {
-                            files.push(entry.path().to_path_buf());
-                        }
-                    }
-                }
+        // 🔥 Используем .flatten() вместо if let
+        for entry in builder.build().flatten() {
+            // 🔥 Используем is_some_and
+            if entry.file_type().is_some_and(|t| t.is_file())
+                // 🔥 Склеиваем if-ы
+                && is_text_file(entry.path())
+                && !matches_exclude(entry.path(), exclude_patterns)
+                && allowed_exts.is_none_or(|exts| {
+                    exts.iter().any(|e| {
+                        entry.path().extension().is_some_and(|ext| {
+                            ext.eq_ignore_ascii_case(e.trim_start_matches('.'))
+                        })
+                    }) || entry.path().file_name().is_some_and(|name| name == "Gemfile")
+                })
+            {
+                files.push(entry.path().to_path_buf());
             }
         }
     }
@@ -140,15 +131,12 @@ fn is_text_file(path: &Path) -> bool {
     use std::fs::File;
     use std::io::Read;
 
-    if let Ok(mut file) = File::open(path) {
-        let mut buffer = [0u8; 1024];
-        if file.read(&mut buffer).is_ok() {
-            if buffer.contains(&0) {
-                return false;
-            }
-        }
-    }
-    true
+    let mut file = match File::open(path) {
+        Ok(f) => f,
+        Err(_) => return true, // если не удалось открыть — считаем текстовым
+    };
+    let mut buffer = [0u8; 1024];
+    file.read(&mut buffer).is_ok() && !buffer.contains(&0)
 }
 
 fn matches_exclude(path: &Path, patterns: &[String]) -> bool {
@@ -158,10 +146,10 @@ fn matches_exclude(path: &Path, patterns: &[String]) -> bool {
             builder.add(glob);
         }
     }
-    if let Ok(set) = builder.build() {
-        if let Some(file_name) = path.file_name().and_then(|s| s.to_str()) {
-            return set.is_match(file_name);
-        }
+    if let Ok(set) = builder.build()
+        && let Some(file_name) = path.file_name().and_then(|s| s.to_str())
+    {
+        return set.is_match(file_name);
     }
     false
 }
