@@ -4,3 +4,12 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+clap = { version = "4.0", features = ["derive"] }
+ignore = "0.4"
+walkdir = "2.3"
+globset = "0.4"
+terminal_size = "0.3"
+
+[[bin]]
+name = "pj"
+path = "src/main.rs"
