@@ -1,3 +1,4 @@
+// src/main.rs
 use clap::Parser;
 use std::path::PathBuf;
 
@@ -53,24 +54,27 @@ fn main() {
     let mut exclude_files: Vec<String> = exclude_files.iter().map(|s| s.to_string()).collect();
     exclude_files.extend(cli.exclude);
 
-    let files = pj_rs::filters::collect_and_filter(
+    // --- Теперь получаем FilterStats ---
+    let stats = pj_rs::filters::collect_and_filter(
         &args,
         allowed_exts.as_deref(),
         &forbidden_dirs,
         &exclude_files,
     );
 
-    // 🔥 Проверка лимитов
+    // --- Проверка лимитов по статистике ---
     if !cli.force {
-        let total_size: u64 = files
+        let total_size: u64 = stats
+            .included_files // Используем файлы из статистики
             .iter()
             .map(|f| f.metadata().map(|m| m.len()).unwrap_or(0))
             .sum();
 
-        if files.len() > MAX_FILES {
+        if stats.included_files.len() > MAX_FILES {
+            // Используем файлы из статистики
             eprintln!(
                 "⚠️  Warning: Found {} files (limit: {}).",
-                files.len(),
+                stats.included_files.len(), // Используем файлы из статистики
                 MAX_FILES
             );
             eprintln!("Use --force to proceed anyway.");
@@ -87,10 +91,10 @@ fn main() {
     }
 
     if cli.tree {
-        pj_rs::output::print_tree(&files);
+        pj_rs::output::print_tree(&stats); // Передаём &stats
     } else if cli.list {
-        pj_rs::output::print_list(&files);
+        pj_rs::output::print_list(&stats); // Передаём &stats
     } else {
-        pj_rs::output::print_content(&files);
+        pj_rs::output::print_content(&stats.included_files); // Передаём только список файлов
     }
 }

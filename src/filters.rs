@@ -1,8 +1,17 @@
 use globset::{Glob, GlobSetBuilder};
 use ignore::WalkBuilder;
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-type TemplateConfig = (
+#[derive(Debug, Clone)]
+pub struct FilterStats {
+    pub included_files: Vec<PathBuf>,
+    pub included_extensions: HashSet<String>,
+    pub filtered_out_extensions: HashSet<String>,
+    pub total_processed_files: usize, // Общее количество файлов, которые были рассмотрены
+}
+
+pub type TemplateConfig = (
     Option<Vec<&'static str>>,
     Vec<&'static str>,
     Vec<&'static str>,
@@ -91,8 +100,11 @@ pub fn collect_and_filter(
     allowed_exts: Option<&[&str]>,
     forbidden_dirs: &[String],
     exclude_patterns: &[String],
-) -> Vec<PathBuf> {
-    let mut files = Vec::new();
+) -> FilterStats {
+    let mut included_files = Vec::new();
+    let mut included_extensions = HashSet::new();
+    let mut filtered_out_extensions = HashSet::new();
+    let mut total_processed_files = 0; // Счётчик всех файлов
 
     for path in paths {
         let mut builder = WalkBuilder::new(path);
@@ -103,28 +115,58 @@ pub fn collect_and_filter(
             !forbidden_dirs.contains(&entry.file_name().to_string_lossy().to_string())
         });
 
-        // 🔥 Используем .flatten() вместо if let
         for entry in builder.build().flatten() {
-            // 🔥 Используем is_some_and
-            if entry.file_type().is_some_and(|t| t.is_file())
-                // 🔥 Склеиваем if-ы
-                && is_text_file(entry.path())
-                && !matches_exclude(entry.path(), exclude_patterns)
-                && allowed_exts.is_none_or(|exts| {
+            if entry.file_type().is_some_and(|t| t.is_file()) {
+                total_processed_files += 1; // Увеличиваем счётчик
+
+                let path = entry.path();
+                if !is_text_file(path) {
+                    // Файл не текстовый, добавляем его расширение в отфильтрованные (или можно игнорировать)
+                    // Для простоты добавим, как если бы оно не прошло фильтр
+                    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                        filtered_out_extensions.insert(ext.to_lowercase());
+                    }
+                    continue; // Переходим к следующему файлу
+                }
+
+                if matches_exclude(path, exclude_patterns) {
+                    // Файл соответствует паттерну исключения
+                    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                        filtered_out_extensions.insert(ext.to_lowercase());
+                    }
+                    continue;
+                }
+
+                let allowed_by_extension = allowed_exts.is_none_or(|exts| {
                     exts.iter().any(|e| {
-                        entry.path().extension().is_some_and(|ext| {
-                            ext.eq_ignore_ascii_case(e.trim_start_matches('.'))
-                        })
-                    }) || entry.path().file_name().is_some_and(|name| name == "Gemfile")
-                })
-            {
-                files.push(entry.path().to_path_buf());
+                        path.extension()
+                            .is_some_and(|ext| ext.eq_ignore_ascii_case(e.trim_start_matches('.')))
+                    }) || path.file_name().is_some_and(|name| name == "Gemfile") // Явно включаем Gemfile
+                });
+
+                if allowed_by_extension {
+                    // Файл прошёл все проверки
+                    included_files.push(path.to_path_buf());
+                    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                        included_extensions.insert(ext.to_lowercase());
+                    }
+                } else {
+                    // Файл не прошёл проверку по расширению
+                    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                        filtered_out_extensions.insert(ext.to_lowercase());
+                    }
+                }
             }
         }
     }
 
-    files.sort();
-    files
+    included_files.sort();
+    FilterStats {
+        included_files,
+        included_extensions,
+        filtered_out_extensions,
+        total_processed_files,
+    }
 }
 
 fn is_text_file(path: &Path) -> bool {
