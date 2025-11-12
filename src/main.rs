@@ -1,6 +1,9 @@
 use clap::Parser;
 use std::path::PathBuf;
 
+const MAX_FILES: usize = 100;
+const MAX_TOTAL_SIZE: u64 = 10 * 1024 * 1024; // 10 MB
+
 #[derive(Parser)]
 #[command(name = "pj")]
 #[command(about = "Dump project context with filters")]
@@ -20,6 +23,10 @@ struct Cli {
     /// Exclude files matching pattern
     #[arg(long, short = 'x')]
     exclude: Vec<String>,
+
+    /// Force output even if files/size limits are exceeded
+    #[arg(long, short = 'F')]
+    force: bool,
 
     /// Paths to scan (defaults to current directory)
     paths: Vec<PathBuf>,
@@ -42,7 +49,6 @@ fn main() {
         None => pj_rs::filters::get_default_config(),
     };
 
-    // Преобразуем Vec<&str> в Vec<String>
     let forbidden_dirs: Vec<String> = forbidden_dirs.iter().map(|s| s.to_string()).collect();
     let mut exclude_files: Vec<String> = exclude_files.iter().map(|s| s.to_string()).collect();
     exclude_files.extend(cli.exclude);
@@ -53,6 +59,32 @@ fn main() {
         &forbidden_dirs,
         &exclude_files,
     );
+
+    // 🔥 Проверка лимитов
+    if !cli.force {
+        let total_size: u64 = files
+            .iter()
+            .map(|f| f.metadata().map(|m| m.len()).unwrap_or(0))
+            .sum();
+
+        if files.len() > MAX_FILES {
+            eprintln!(
+                "⚠️  Warning: Found {} files (limit: {}).",
+                files.len(),
+                MAX_FILES
+            );
+            eprintln!("Use --force to proceed anyway.");
+            std::process::exit(1);
+        }
+        if total_size > MAX_TOTAL_SIZE {
+            eprintln!(
+                "⚠️  Warning: Total size is {:.2} MB (limit: 10 MB).",
+                total_size as f64 / 1024.0 / 1024.0
+            );
+            eprintln!("Use --force to proceed anyway.");
+            std::process::exit(1);
+        }
+    }
 
     if cli.tree {
         pj_rs::output::print_tree(&files);
