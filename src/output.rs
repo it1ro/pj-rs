@@ -133,13 +133,11 @@ fn print_filter_summary(stats: &FilterStats) {
     // Используем cloned() или owned() чтобы получить Vec<String>, а не Vec<&String>
     let mut included_sorted: Vec<String> = stats
         .included_extensions
-        .iter()
-        .map(|s| s.clone())
+        .iter().cloned()
         .collect();
     let mut filtered_sorted: Vec<String> = stats
         .filtered_out_extensions
-        .iter()
-        .map(|s| s.clone())
+        .iter().cloned()
         .collect();
 
     // Сортируем для более предсказуемого вывода
