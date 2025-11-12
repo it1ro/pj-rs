@@ -2,7 +2,6 @@ use globset::{Glob, GlobSetBuilder};
 use ignore::WalkBuilder;
 use std::path::{Path, PathBuf};
 
-// === Шаблоны ===
 pub fn get_template(
     name: &str,
 ) -> Option<(
